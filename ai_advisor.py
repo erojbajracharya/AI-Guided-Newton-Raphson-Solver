@@ -92,15 +92,30 @@ Provide in 3 short sections:
                       prev_step: Optional[Dict] = None) -> str:
         """Explain what happened at a specific iteration."""
         if not self.available:
-            return f"At x = {step['x']:.6f}, f(x) = {step['f_x']:.6f}. " \
-                   f"The {'error is decreasing' if prev_step and abs(step['f_x']) < abs(prev_step['f_x']) else 'method is progressing'}."
+            msg = f"**Newton-Raphson Iteration {step['iteration']} (Fallback explanation)**\n\n"
+            msg += f"- **Current Guess (x):** `{step['x']:.6f}`\n"
+            msg += f"- **Function value f(x):** `{step['f_x']:.2e}` (this is our vertical height; we want this to be zero)\n"
+            msg += f"- **Slope/Derivative f'(x):** `{step['df_x']:.6f}` (the direction/steepness at our current guess)\n"
+            msg += f"- **Step size taken:** `{step['step_size']:.2e}` (distance we moved along the x-axis to get here)\n\n"
+            
+            if prev_step:
+                curr_err = abs(step['f_x'])
+                prev_err = abs(prev_step['f_x'])
+                if curr_err < prev_err:
+                    improvement = (prev_err - curr_err) / prev_err * 100 if prev_err != 0 else 0
+                    msg += f"📊 **Progress:** The error decreased by {improvement:.1f}%. The solver is successfully moving closer to the root!"
+                else:
+                    msg += "⚠️ **Warning:** The error increased compared to the previous step. This means we might be oscillating or moving away from the root."
+            else:
+                msg += "🌱 **Start:** This is the initial step based on the starting guess $x_0$."
+            return msg
         
         prev_info = ""
         if prev_step:
             prev_info = f"Previous: x = {prev_step['x']:.6f}, f(x) = {prev_step['f_x']:.6f}\n"
         
         prompt = f"""Explain this Newton-Raphson step in 2 sentences:
-
+ 
 f(x) = {function_str}
 {prev_info}
 Current (iteration {step['iteration']}):
@@ -108,7 +123,7 @@ Current (iteration {step['iteration']}):
 - f(x) = {step['f_x']:.6f}
 - f'(x) = {step['df_x']:.6f}
 - Step taken = {step['step_size']:.6f}
-
+ 
 What does this tell us about convergence?"""
         
         try:
@@ -149,21 +164,22 @@ What does this tell us about convergence?"""
     def _fallback_suggestions(self) -> Dict:
         """Default suggestions when AI unavailable."""
         return {
-            "guesses": [-2.0, 0.0, 2.0],
-            "reasoning": "Default guesses (AI unavailable). Try points where function might cross zero."
+            "guesses": [-2.0, 0.5, 2.0],
+            "reasoning": "Fallback Mode (AI key not set): Try evaluating the function at these standard test points to find where it changes sign, indicating a root is nearby."
         }
     
     def _fallback_diagnosis(self, issues: List[str]) -> str:
         """Default diagnosis when AI unavailable."""
         messages = {
-            "ZERO_DERIVATIVE": "The derivative became zero, causing division by zero. Try a different starting point away from critical points.",
-            "OSCILLATING": "The method is bouncing between values. Try a starting point closer to the root or use bisection method.",
-            "DIVERGING": "The iterations are moving away from the root. The initial guess may be too far. Try a smaller starting value.",
-            "MAX_ITERATIONS_REACHED": "Too many iterations needed. Increase max iterations or check if a root exists.",
-            "NUMERICAL_INSTABILITY": "Numbers became too large or NaN. Check for singularities in the function.",
-            "SMALL_DERIVATIVE_AT_START": "Starting near a flat region. Move initial guess to where slope is steeper."
+            "ZERO_DERIVATIVE": "The derivative became zero. Since the Newton-Raphson formula divides by f'(x), a zero slope results in division by zero (tangent is parallel to the x-axis).",
+            "ZERO_OR_SMALL_DERIVATIVE": "The derivative is zero or extremely close to zero. This causes division by zero or an extremely large step size, pushing the next guess far away from the root.",
+            "OSCILLATING": "The solver is bouncing back and forth between two or more values (infinitely looping). This happens when the initial guess is caught in a cycle near local minima or maxima.",
+            "DIVERGING": "The iterations are moving further away from the root rather than approaching it. The starting point might be too far from the root or on a steep slope facing away.",
+            "MAX_ITERATIONS_REACHED": "The solver reached the maximum iterations allowed without satisfying the convergence criteria. The function might not have a real root, or the tolerance is set too strict.",
+            "NUMERICAL_INSTABILITY": "The calculation resulted in numbers that are too large (overflow), too small (underflow), or not a number (NaN). This occurs when evaluating undefined points or division by zero.",
+            "SMALL_DERIVATIVE_AT_START": "The starting point has a very flat slope, meaning the initial tangent line points far away from the root. It is better to start at a point with a larger slope."
         }
         diagnosis = "ROOT CAUSE: " + ". ".join(messages.get(i, i) for i in issues)
-        diagnosis += "\n\nFIX: Try different initial guesses, especially where f(x) changes sign."
-        diagnosis += "\n\nALTERNATIVE: Consider bisection method if Newton-Raphson continues to fail."
+        diagnosis += "\n\nFIX: Try different initial guesses, especially where f(x) changes sign to bracket a root."
+        diagnosis += "\n\nALTERNATIVE: Consider the Bisection or Secant method if Newton-Raphson continues to fail."
         return diagnosis

@@ -87,6 +87,30 @@ The app will open automatically in your browser at **http://localhost:8501**.
 
 ---
 
+## How to Present This Project
+
+To present this project to an audience or in a student presentation, explain the workflow using these simple steps:
+
+1. **User enters a mathematical function**: The user inputs any function $f(x)$ (like `x**2 - 4`) and a starting point $x_0$ using the sidebar.
+2. **SymPy finds the derivative**: The application uses SymPy to calculate the exact symbolic derivative $f'(x)$ automatically.
+3. **Newton-Raphson formula is applied repeatedly**: The solver executes the iterative formula:
+   $$x_{n+1} = x_n - \frac{f(x_n)}{f'(x_n)}$$
+   Each iteration refines the estimate of the root.
+4. **Streamlit shows graph, iteration table, and convergence**: Streamlit renders an interactive visualization showing the curve, tangent lines, step log-scale error decrease, and a summary details table.
+5. **Gemini AI is optional**: If a Google Gemini API Key is provided, the AI advisor provides mathematical insights. If not, the app uses built-in math rules to explain the iteration steps and diagnose issues.
+
+---
+
+## Project Highlights
+
+- **Automatic Differentiation**: Finds symbolic derivatives automatically using SymPy.
+- **Iteration Table**: Displays a clean, tabular log of values for every step.
+- **Graph Visualization**: Renders both function tangents and convergence history plots.
+- **Convergence Checking**: Uses a dual check ensuring both $|f(x)|$ and $|x_{new} - x|$ are below tolerance.
+- **Optional AI Guidance**: Leverages LLM expertise for tutoring, with clean student-friendly fallback explanations when offline.
+
+---
+
 ## Project Structure
 
 ```

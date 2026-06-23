@@ -59,6 +59,15 @@ class NewtonRaphsonSolver:
         self.converged: bool = False
         self.root: Optional[float] = None
         self.issues: List[str] = []
+
+    def _add_issue(self, issue: str):
+        """Add issue label if not already present to avoid duplicates."""
+        if issue not in self.issues:
+            self.issues.append(issue)
+
+    def get_derivative_string(self) -> str:
+        """Return string representation of the symbolic derivative."""
+        return str(self.df_sym)
     
     def solve(self) -> Tuple[Optional[float], bool, List[Dict], List[str]]:
         """
@@ -73,33 +82,41 @@ class NewtonRaphsonSolver:
             fx = self.f(x)
             dfx = self.df(x)
             
+            # Check numerical stability of evaluation before using fx/dfx
+            if not (np.isfinite(fx) and np.isfinite(dfx)):
+                self._add_issue("NUMERICAL_INSTABILITY")
+                break
+            
             # Record iteration
+            step_size = abs(fx / dfx) if dfx != 0 else float('inf')
             self.history.append({
                 'iteration': i + 1,
                 'x': x,
                 'f_x': fx,
                 'df_x': dfx,
-                'step_size': abs(fx / dfx) if dfx != 0 else float('inf'),
+                'step_size': step_size,
                 'error': abs(fx)
             })
             
-            # Check convergence
-            if abs(fx) < self.tol:
-                self.converged = True
-                self.root = x
-                break
-            
-            # Check zero derivative
-            if dfx == 0:
-                self.issues.append("ZERO_DERIVATIVE")
+            # Check zero or small derivative
+            if dfx == 0 or abs(dfx) < 1e-12:
+                self._add_issue("ZERO_OR_SMALL_DERIVATIVE")
                 break
             
             # Newton step
             x_new = x - fx / dfx
             
-            # Check numerical stability
-            if np.isnan(x_new) or np.isinf(x_new):
-                self.issues.append("NUMERICAL_INSTABILITY")
+            # Check numerical stability of new step
+            if not np.isfinite(x_new):
+                self._add_issue("NUMERICAL_INSTABILITY")
+                break
+            
+            # Check convergence using both:
+            # a) abs(fx) < tolerance
+            # b) abs(x_new - x) < tolerance
+            if abs(fx) < self.tol and abs(x_new - x) < self.tol:
+                self.converged = True
+                self.root = x_new
                 break
             
             x = x_new
@@ -113,7 +130,7 @@ class NewtonRaphsonSolver:
     def _diagnose_issues(self):
         """Identify why solver failed to converge."""
         if len(self.history) >= self.max_iter:
-            self.issues.append("MAX_ITERATIONS_REACHED")
+            self._add_issue("MAX_ITERATIONS_REACHED")
         
         if len(self.history) > 2:
             # Detect oscillation (sign flipping)
@@ -123,16 +140,16 @@ class NewtonRaphsonSolver:
                 if np.sign(recent[i]['f_x']) != np.sign(recent[i-1]['f_x'])
             )
             if sign_changes >= 3:
-                self.issues.append("OSCILLATING")
+                self._add_issue("OSCILLATING")
             
             # Detect divergence (errors increasing)
             errors = [h['error'] for h in recent]
             if all(errors[i] > errors[i-1] for i in range(1, len(errors))):
-                self.issues.append("DIVERGING")
+                self._add_issue("DIVERGING")
         
         # Check derivative at start
         if abs(self.df(self.x0)) < 1e-6:
-            self.issues.append("SMALL_DERIVATIVE_AT_START")
+            self._add_issue("SMALL_DERIVATIVE_AT_START")
     
     def get_plot_data(self) -> Dict:
         """Generate data for visualization."""

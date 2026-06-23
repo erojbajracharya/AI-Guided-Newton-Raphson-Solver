@@ -40,6 +40,9 @@ def main():
     st.title("📐 AI-Guided Newton-Raphson Solver")
     st.caption("Find roots of f(x) = 0 using iterative numerical methods")
     
+    # Intro box
+    st.info("This app solves f(x)=0 using Newton-Raphson method.")
+    
     # Initialize AI advisor
     ai = GeminiAdvisor()
     
@@ -99,8 +102,30 @@ def main():
         st.error(validation_msg)
         return
     
-    # Solve button
-    if st.button("🚀 Solve", type="primary", use_container_width=True):
+    # Show derivative formula f'(x) to the user
+    try:
+        from sympy import sympify, diff, symbols, latex
+        x_sym = symbols('x')
+        f_sym = sympify(func_input)
+        df_sym = diff(f_sym, x_sym)
+        st.latex(rf"f'(x) = {latex(df_sym)}")
+    except Exception as e:
+        st.warning(f"Could not compute derivative: {e}")
+    
+    # Solve and Clear buttons
+    col_btn_solve, col_btn_clear = st.columns(2)
+    with col_btn_solve:
+        solve_clicked = st.button("🚀 Solve", type="primary", use_container_width=True)
+    with col_btn_clear:
+        clear_clicked = st.button("🗑️ Clear Results", use_container_width=True)
+        
+    if clear_clicked:
+        for key in ['result', 'ai_guesses', 'ai_diagnosis', 'ai_step']:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
+        
+    if solve_clicked:
         # Run solver
         with st.spinner("Computing..."):
             solver = NewtonRaphsonSolver(func_input, x0, tol, max_iter)
@@ -127,6 +152,31 @@ def main():
         else:
             st.error(f"❌ Did not converge. Issues: {', '.join(result['issues'])}")
         
+        # Summary Cards
+        col_c1, col_c2, col_c3, col_c4 = st.columns(4)
+        with col_c1:
+            st.metric(
+                label="Root", 
+                value=f"{result['root']:.6f}" if result['root'] is not None and np.isfinite(result['root']) else "N/A"
+            )
+        with col_c2:
+            st.metric(
+                label="Total Iterations", 
+                value=len(result['history'])
+            )
+        with col_c3:
+            final_err = result['history'][-1]['error'] if result['history'] else 0.0
+            st.metric(
+                label="Final Error", 
+                value=f"{final_err:.2e}" if result['history'] else "N/A"
+            )
+        with col_c4:
+            status_val = "Converged" if result['converged'] else "Failed"
+            st.metric(
+                label="Status", 
+                value=status_val
+            )
+            
         # === TABS ===
         tab1, tab2, tab3, tab4 = st.tabs([
             "📊 Visualization", 
@@ -164,9 +214,9 @@ def main():
                 if result['root'] is not None and np.isfinite(result['root']):
                     ax1.axvline(x=result['root'], color='green', linestyle=':', label=f"Root ≈ {result['root']:.4f}")
                 
-                ax1.set_xlabel("x")
-                ax1.set_ylabel("f(x)")
-                ax1.set_title(f"f(x) = {result['func']}")
+                ax1.set_xlabel("Input variable (x)", fontsize=10)
+                ax1.set_ylabel("Function value f(x)", fontsize=10)
+                ax1.set_title(f"Newton-Raphson Steps on f(x) = {result['func']}", fontsize=12, fontweight='bold')
                 ax1.legend()
                 ax1.grid(True, alpha=0.3)
                 
@@ -181,9 +231,9 @@ def main():
                 
                 ax2.semilogy(iters_num, errors, 'g-o', markersize=8, linewidth=2)
                 ax2.axhline(y=tol, color='red', linestyle='--', label=f"Tolerance = {tol}")
-                ax2.set_xlabel("Iteration")
-                ax2.set_ylabel("|f(x)| (log scale)")
-                ax2.set_title("Convergence History")
+                ax2.set_xlabel("Iteration Number", fontsize=10)
+                ax2.set_ylabel("Error Magnitude |f(x)|", fontsize=10)
+                ax2.set_title("Convergence Rate (Error per Iteration)", fontsize=12, fontweight='bold')
                 ax2.legend()
                 ax2.grid(True, alpha=0.3)
                 
@@ -192,6 +242,7 @@ def main():
         # --- TAB 2: ITERATIONS TABLE ---
         with tab2:
             st.subheader("Iteration Details")
+            st.write("Each row shows one Newton-Raphson iteration.")
             
             # Format data for table
             table_data = []
