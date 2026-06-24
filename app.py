@@ -36,12 +36,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def set_example_function(expr):
+    st.session_state["func"] = expr
+    for key in ["result", "ai_guesses", "ai_diagnosis", "ai_step"]:
+        if key in st.session_state:
+            del st.session_state[key]
+
+
 def main():
+    if "func" not in st.session_state:
+        st.session_state["func"] = "x**2 - 4"
+
     st.title("📐 AI-Guided Newton-Raphson Solver")
     st.caption("Find roots of f(x) = 0 using iterative numerical methods")
-    
-    # Intro box
-    st.info("This app solves f(x)=0 using Newton-Raphson method.")
     
     # Initialize AI advisor
     ai = GeminiAdvisor()
@@ -50,10 +57,6 @@ def main():
     with st.sidebar:
         st.header("⚙️ Configuration")
         
-        # Initialize function in session state if not present
-        if 'func' not in st.session_state:
-            st.session_state['func'] = "x**2 - 4"
-            
         func_input = st.text_input(
             "f(x) = ",
             key="func",
@@ -74,6 +77,16 @@ def main():
         
         st.divider()
         
+        solve_clicked = st.button("🚀 Solve", type="primary", use_container_width=True)
+        
+        if st.button("Clear Results", use_container_width=True):
+            for key in ["result", "ai_guesses", "ai_diagnosis", "ai_step"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
+            
+        st.divider()
+        
         # Example functions
         st.subheader("📋 Examples")
         examples = {
@@ -85,9 +98,13 @@ def main():
             "sin(x) - x/3": "sin(x) - x/3"
         }
         for name, expr in examples.items():
-            if st.button(name, key=f"ex_{name}", use_container_width=True):
-                st.session_state['func'] = expr
-                st.rerun()
+            st.button(
+                name,
+                key=f"ex_{name}",
+                use_container_width=True,
+                on_click=set_example_function,
+                args=(expr,)
+            )
         
         st.divider()
         
@@ -96,51 +113,55 @@ def main():
     
     # === MAIN CONTENT ===
     
-    # Validate function
-    is_valid, validation_msg = NewtonRaphsonSolver.validate_function(func_input)
-    if not is_valid:
-        st.error(validation_msg)
+    if solve_clicked:
+        # Validate function
+        is_valid, validation_msg = NewtonRaphsonSolver.validate_function(func_input)
+        if not is_valid:
+            st.error(validation_msg)
+        else:
+            # Run solver
+            with st.spinner("Computing..."):
+                solver = NewtonRaphsonSolver(func_input, x0, tol, max_iter)
+                root, converged, history, issues = solver.solve()
+                plot_data = solver.get_plot_data()
+            
+            # Store in session state
+            st.session_state['result'] = {
+                'root': root,
+                'converged': converged,
+                'history': history,
+                'issues': issues,
+                'plot_data': plot_data,
+                'func': func_input
+            }
+            
+    # Welcome screen check
+    if "result" not in st.session_state:
+        st.markdown("""
+## Welcome to the AI-Guided Newton-Raphson Solver
+
+This app solves equations of the form **f(x) = 0** using the Newton-Raphson method.
+
+### How to use:
+1. Enter a function in the sidebar.
+2. Choose an initial guess.
+3. Set tolerance and maximum iterations.
+4. Click **Solve** to start.
+
+You can also click one of the example functions in the sidebar.
+""")
+        st.info("Enter a function or choose an example, then click Solve to begin.")
         return
-    
+        
     # Show derivative formula f'(x) to the user
     try:
         from sympy import sympify, diff, symbols, latex
         x_sym = symbols('x')
-        f_sym = sympify(func_input)
+        f_sym = sympify(st.session_state['result']['func'])
         df_sym = diff(f_sym, x_sym)
         st.latex(rf"f'(x) = {latex(df_sym)}")
     except Exception as e:
         st.warning(f"Could not compute derivative: {e}")
-    
-    # Solve and Clear buttons
-    col_btn_solve, col_btn_clear = st.columns(2)
-    with col_btn_solve:
-        solve_clicked = st.button("🚀 Solve", type="primary", use_container_width=True)
-    with col_btn_clear:
-        clear_clicked = st.button("🗑️ Clear Results", use_container_width=True)
-        
-    if clear_clicked:
-        for key in ['result', 'ai_guesses', 'ai_diagnosis', 'ai_step']:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()
-        
-    if solve_clicked:
-        # Run solver
-        with st.spinner("Computing..."):
-            solver = NewtonRaphsonSolver(func_input, x0, tol, max_iter)
-            root, converged, history, issues = solver.solve()
-            plot_data = solver.get_plot_data()
-        
-        # Store in session state
-        st.session_state['result'] = {
-            'root': root,
-            'converged': converged,
-            'history': history,
-            'issues': issues,
-            'plot_data': plot_data,
-            'func': func_input
-        }
     
     # === DISPLAY RESULTS ===
     if 'result' in st.session_state:
