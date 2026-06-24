@@ -2,6 +2,7 @@
 AI Advisor Module
 =================
 Uses Google Gemini to provide intelligent guidance for Newton-Raphson solving.
+Supports multiple API keys with automatic rotation.
 """
 
 from google import genai
@@ -13,34 +14,102 @@ class GeminiAdvisor:
     """AI advisor using Google Gemini for Newton-Raphson guidance."""
     
     def __init__(self, api_key: str = None):
-        """Initialize Gemini with API key."""
+        """Initialize Gemini with one or more API keys.
+        
+        Supports:
+        - A single key passed directly via api_key parameter
+        - AI_GEN_API_KEYS env var with comma-separated keys
+        - GOOGLE_API_KEY env var as a single backup key
+        """
+        # Collect all available keys
+        keys = []
+        
         if api_key:
-            self.api_key = api_key
+            keys.append(api_key.strip())
         else:
-            # Support comma-separated key list from AI_GEN_API_KEYS, or single GOOGLE_API_KEY
+            # Parse comma-separated keys from AI_GEN_API_KEYS
             keys_str = os.getenv('AI_GEN_API_KEYS', '')
             if keys_str:
-                # Strip quotes and pick the first key
                 keys_str = keys_str.strip('"').strip("'")
-                self.api_key = keys_str.split(',')[0].strip()
-            else:
-                self.api_key = os.getenv('GOOGLE_API_KEY', '')
+                for k in keys_str.split(','):
+                    stripped = k.strip()
+                    if stripped:
+                        keys.append(stripped)
+            
+            # Add single backup key from GOOGLE_API_KEY
+            single_key = os.getenv('GOOGLE_API_KEY', '').strip()
+            if single_key:
+                keys.append(single_key)
         
-        if not self.api_key:
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_keys = []
+        for k in keys:
+            if k not in seen:
+                seen.add(k)
+                unique_keys.append(k)
+        
+        self.api_keys = unique_keys
+        self._current_index = 0
+        self.model_name = 'gemini-2.5-flash'
+        
+        if not self.api_keys:
             self.available = False
+            self.client = None
             return
         
+        # Create initial client with the first key
         try:
-            self.client = genai.Client(api_key=self.api_key)
-            self.model_name = 'gemini-2.5-flash'
+            self.client = genai.Client(api_key=self.api_keys[0])
             self.available = True
         except Exception:
             self.available = False
+            self.client = None
+    
+    def _try_generate_content(self, prompt: str) -> str:
+        """Try each API key one by one until one works.
+        
+        Returns response.text on success.
+        Raises the last exception if all keys fail.
+        """
+        if not self.api_keys:
+            raise ConnectionError("No API keys available.")
+        
+        last_error = None
+        num_keys = len(self.api_keys)
+        
+        for attempt in range(num_keys):
+            index = (self._current_index + attempt) % num_keys
+            
+            try:
+                # Create client for this key if it's not the current one
+                if attempt > 0 or self.client is None:
+                    self.client = genai.Client(api_key=self.api_keys[index])
+                
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt
+                )
+                
+                # This key worked — remember it for future requests
+                self._current_index = index
+                self.available = True
+                return response.text
+                
+            except Exception as e:
+                last_error = e
+                continue
+        
+        # All keys failed
+        raise last_error
     
     def suggest_initial_guesses(self, function_str: str) -> Dict:
         """Suggest good starting points for Newton-Raphson."""
         if not self.available:
-            return self._fallback_suggestions()
+            return {
+                "guesses": [],
+                "reasoning": "AI Advisor is not connected. Add GOOGLE_API_KEY or AI_GEN_API_KEYS in the .env file to enable AI suggestions."
+            }
         
         prompt = f"""You are a numerical analysis expert. For f(x) = {function_str},
 suggest 3 good initial guesses for Newton-Raphson method.
@@ -51,19 +120,19 @@ Return ONLY valid JSON (no markdown, no code blocks):
 {{"guesses": [val1, val2, val3], "reasoning": "brief explanation"}}"""
         
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            return self._parse_json(response.text)
+            text = self._try_generate_content(prompt)
+            return self._parse_json(text)
         except Exception:
-            return self._fallback_suggestions()
+            return {
+                "guesses": [],
+                "reasoning": "AI Advisor could not connect with the available API keys. Please check the keys or try again later."
+            }
     
     def diagnose_failure(self, function_str: str, history: List[Dict], 
                           issues: List[str]) -> str:
         """Diagnose why Newton-Raphson failed."""
         if not self.available:
-            return self._fallback_diagnosis(issues)
+            return "AI Advisor is not connected. Add GOOGLE_API_KEY or AI_GEN_API_KEYS in the .env file to enable failure diagnosis."
         
         history_str = self._format_history(history)
         
@@ -80,35 +149,15 @@ Provide in 3 short sections:
 3. ALTERNATIVE: If Newton won't work, what method? (1 sentence)"""
         
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            return response.text
+            return self._try_generate_content(prompt)
         except Exception:
-            return self._fallback_diagnosis(issues)
+            return "AI Advisor could not connect with the available API keys. Please check the keys or try again later."
     
     def explain_step(self, function_str: str, step: Dict, 
                       prev_step: Optional[Dict] = None) -> str:
         """Explain what happened at a specific iteration."""
         if not self.available:
-            msg = f"**Newton-Raphson Iteration {step['iteration']} (Fallback explanation)**\n\n"
-            msg += f"- **Current Guess (x):** `{step['x']:.6f}`\n"
-            msg += f"- **Function value f(x):** `{step['f_x']:.2e}` (this is our vertical height; we want this to be zero)\n"
-            msg += f"- **Slope/Derivative f'(x):** `{step['df_x']:.6f}` (the direction/steepness at our current guess)\n"
-            msg += f"- **Step size taken:** `{step['step_size']:.2e}` (distance we moved along the x-axis to get here)\n\n"
-            
-            if prev_step:
-                curr_err = abs(step['f_x'])
-                prev_err = abs(prev_step['f_x'])
-                if curr_err < prev_err:
-                    improvement = (prev_err - curr_err) / prev_err * 100 if prev_err != 0 else 0
-                    msg += f"📊 **Progress:** The error decreased by {improvement:.1f}%. The solver is successfully moving closer to the root!"
-                else:
-                    msg += "⚠️ **Warning:** The error increased compared to the previous step. This means we might be oscillating or moving away from the root."
-            else:
-                msg += "🌱 **Start:** This is the initial step based on the starting guess $x_0$."
-            return msg
+            return "AI Advisor is not connected. Add GOOGLE_API_KEY or AI_GEN_API_KEYS in the .env file to enable step explanation."
         
         prev_info = ""
         if prev_step:
@@ -127,13 +176,48 @@ Current (iteration {step['iteration']}):
 What does this tell us about convergence?"""
         
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            return response.text
+            return self._try_generate_content(prompt)
         except Exception:
-            return f"Step {step['iteration']}: Moved to x = {step['x']:.6f}"
+            return "AI Advisor could not connect with the available API keys. Please check the keys or try again later."
+    
+    def answer_question(self, function_str: str, question: str,
+                         history: List[Dict], issues: List[str],
+                         root=None, converged=False,
+                         derivative_str: str = "") -> str:
+        """Answer a student's question about the solver results."""
+        if not question or not question.strip():
+            return "Please type a question first."
+        
+        if not self.available:
+            return "AI Assistant is not connected. Add GOOGLE_API_KEY or AI_GEN_API_KEYS in the .env file to enable answers."
+        
+        # Build iteration summary (first 3 + last 2)
+        iter_summary = self._format_history(history)
+        
+        # Build context
+        context = f"Function: f(x) = {function_str}\n"
+        if derivative_str:
+            context += f"Derivative: f'(x) = {derivative_str}\n"
+        if root is not None:
+            context += f"Root found: x = {root}\n"
+        context += f"Converged: {'Yes' if converged else 'No'}\n"
+        if issues:
+            context += f"Issues: {', '.join(issues)}\n"
+        context += f"Iterations summary:\n{iter_summary}\n"
+        
+        prompt = f"""You are helping a student understand a Newton-Raphson solver project.
+Answer in simple student-friendly language.
+
+{context}
+
+Student question: {question}
+
+Give a clear answer in 4-8 sentences. If the question is unrelated to this Newton-Raphson solver project, politely say that this assistant is focused on the Newton-Raphson solver."""
+        
+        try:
+            return self._try_generate_content(prompt)
+        except Exception:
+            return "AI Assistant could not connect with the available API keys. Please check the keys or try again later."
     
     def _format_history(self, history: List[Dict]) -> str:
         """Format history for prompt."""
@@ -159,27 +243,7 @@ What does this tell us about convergence?"""
         try:
             return json.loads(text)
         except Exception:
-            return self._fallback_suggestions()
-    
-    def _fallback_suggestions(self) -> Dict:
-        """Default suggestions when AI unavailable."""
-        return {
-            "guesses": [-2.0, 0.5, 2.0],
-            "reasoning": "Fallback Mode (AI key not set): Try evaluating the function at these standard test points to find where it changes sign, indicating a root is nearby."
-        }
-    
-    def _fallback_diagnosis(self, issues: List[str]) -> str:
-        """Default diagnosis when AI unavailable."""
-        messages = {
-            "ZERO_DERIVATIVE": "The derivative became zero. Since the Newton-Raphson formula divides by f'(x), a zero slope results in division by zero (tangent is parallel to the x-axis).",
-            "ZERO_OR_SMALL_DERIVATIVE": "The derivative is zero or extremely close to zero. This causes division by zero or an extremely large step size, pushing the next guess far away from the root.",
-            "OSCILLATING": "The solver is bouncing back and forth between two or more values (infinitely looping). This happens when the initial guess is caught in a cycle near local minima or maxima.",
-            "DIVERGING": "The iterations are moving further away from the root rather than approaching it. The starting point might be too far from the root or on a steep slope facing away.",
-            "MAX_ITERATIONS_REACHED": "The solver reached the maximum iterations allowed without satisfying the convergence criteria. The function might not have a real root, or the tolerance is set too strict.",
-            "NUMERICAL_INSTABILITY": "The calculation resulted in numbers that are too large (overflow), too small (underflow), or not a number (NaN). This occurs when evaluating undefined points or division by zero.",
-            "SMALL_DERIVATIVE_AT_START": "The starting point has a very flat slope, meaning the initial tangent line points far away from the root. It is better to start at a point with a larger slope."
-        }
-        diagnosis = "ROOT CAUSE: " + ". ".join(messages.get(i, i) for i in issues)
-        diagnosis += "\n\nFIX: Try different initial guesses, especially where f(x) changes sign to bracket a root."
-        diagnosis += "\n\nALTERNATIVE: Consider the Bisection or Secant method if Newton-Raphson continues to fail."
-        return diagnosis
+            return {
+                "guesses": [],
+                "reasoning": "AI Advisor could not connect with the available API keys. Please check the keys or try again later."
+            }

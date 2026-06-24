@@ -38,7 +38,7 @@ st.markdown("""
 
 def set_example_function(expr):
     st.session_state["func"] = expr
-    for key in ["result", "ai_guesses", "ai_diagnosis", "ai_step"]:
+    for key in ["result", "ai_guesses", "ai_diagnosis", "ai_step", "ai_assistant_answer"]:
         if key in st.session_state:
             del st.session_state[key]
 
@@ -80,7 +80,7 @@ def main():
         solve_clicked = st.button("🚀 Solve", type="primary", use_container_width=True)
         
         if st.button("Clear Results", use_container_width=True):
-            for key in ["result", "ai_guesses", "ai_diagnosis", "ai_step"]:
+            for key in ["result", "ai_guesses", "ai_diagnosis", "ai_step", "ai_assistant_answer"]:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
@@ -295,79 +295,135 @@ You can also click one of the example functions in the sidebar.
             st.subheader("🤖 AI-Powered Guidance")
             
             if not ai.available:
-                st.warning("AI not available. Add your GOOGLE_API_KEY to .env file for AI features.")
-                st.code("GOOGLE_API_KEY=your_key_here", language="bash")
+                st.warning("AI Advisor is not connected. Add an API key in .env to enable AI guidance.")
+            else:
+                # AI Suggestion buttons
+                col_btn1, col_btn2, col_btn3 = st.columns(3)
+                
+                with col_btn1:
+                    if st.button("💡 Suggest Starting Points", use_container_width=True):
+                        with st.spinner("Asking AI..."):
+                            suggestions = ai.suggest_initial_guesses(result['func'])
+                            st.session_state['ai_guesses'] = suggestions
+                
+                with col_btn2:
+                    if not result['converged']:
+                        if st.button("🔍 Diagnose Failure", use_container_width=True):
+                            with st.spinner("Analyzing..."):
+                                diagnosis = ai.diagnose_failure(
+                                    result['func'], result['history'], result['issues']
+                                )
+                                st.session_state['ai_diagnosis'] = diagnosis
+                    else:
+                        st.button("🔍 Diagnose Failure", disabled=True, use_container_width=True)
+                
+                with col_btn3:
+                    if st.button("📝 Explain Last Step", use_container_width=True):
+                        with st.spinner("Generating explanation..."):
+                            last = result['history'][-1]
+                            prev = result['history'][-2] if len(result['history']) > 1 else None
+                            explanation = ai.explain_step(result['func'], last, prev)
+                            st.session_state['ai_step'] = explanation
+                
+                # Display AI responses
+                st.divider()
+                
+                if 'ai_guesses' in st.session_state:
+                    guesses = st.session_state['ai_guesses']
+                    st.markdown('<div class="ai-box">', unsafe_allow_html=True)
+                    st.markdown("### 💡 Suggested Initial Guesses")
+                    if 'guesses' in guesses and guesses['guesses']:
+                        for i, g in enumerate(guesses['guesses'], 1):
+                            st.markdown(f"**Guess {i}:** x₀ = {g}")
+                    if 'reasoning' in guesses:
+                        st.markdown(f"*{guesses['reasoning']}*")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
+                if 'ai_diagnosis' in st.session_state:
+                    st.markdown('<div class="ai-box">', unsafe_allow_html=True)
+                    st.markdown("### 🔍 Failure Diagnosis")
+                    st.markdown(st.session_state['ai_diagnosis'])
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
+                if 'ai_step' in st.session_state:
+                    st.markdown('<div class="ai-box">', unsafe_allow_html=True)
+                    st.markdown("### 📝 Step Explanation")
+                    st.markdown(st.session_state['ai_step'])
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Click to explain any iteration
+                st.divider()
+                st.subheader("Click any iteration to get AI explanation")
+                selected = st.selectbox(
+                    "Select iteration:",
+                    options=range(len(result['history'])),
+                    format_func=lambda i: f"Iteration {result['history'][i]['iteration']}"
+                )
+                if st.button("Explain This Iteration"):
+                    step = result['history'][selected]
+                    prev = result['history'][selected-1] if selected > 0 else None
+                    with st.spinner("Thinking..."):
+                        exp = ai.explain_step(result['func'], step, prev)
+                    st.markdown('<div class="ai-box">', unsafe_allow_html=True)
+                    st.markdown(exp)
+                    st.markdown('</div>', unsafe_allow_html=True)
             
-            # AI Suggestion buttons
-            col_btn1, col_btn2, col_btn3 = st.columns(3)
-            
-            with col_btn1:
-                if st.button("💡 Suggest Starting Points", use_container_width=True):
-                    with st.spinner("Asking AI..."):
-                        suggestions = ai.suggest_initial_guesses(result['func'])
-                        st.session_state['ai_guesses'] = suggestions
-            
-            with col_btn2:
-                if not result['converged']:
-                    if st.button("🔍 Diagnose Failure", use_container_width=True):
-                        with st.spinner("Analyzing..."):
-                            diagnosis = ai.diagnose_failure(
-                                result['func'], result['history'], result['issues']
-                            )
-                            st.session_state['ai_diagnosis'] = diagnosis
-                else:
-                    st.button("🔍 Diagnose Failure", disabled=True, use_container_width=True)
-            
-            with col_btn3:
-                if st.button("📝 Explain Last Step", use_container_width=True):
-                    with st.spinner("Generating explanation..."):
-                        last = result['history'][-1]
-                        prev = result['history'][-2] if len(result['history']) > 1 else None
-                        explanation = ai.explain_step(result['func'], last, prev)
-                        st.session_state['ai_step'] = explanation
-            
-            # Display AI responses
+            # === AI ASSISTANT Q&A ===
             st.divider()
+            st.subheader("💬 Ask AI Assistant")
             
-            if 'ai_guesses' in st.session_state:
-                guesses = st.session_state['ai_guesses']
-                st.markdown('<div class="ai-box">', unsafe_allow_html=True)
-                st.markdown("### 💡 Suggested Initial Guesses")
-                if 'guesses' in guesses:
-                    for i, g in enumerate(guesses['guesses'], 1):
-                        st.markdown(f"**Guess {i}:** x₀ = {g}")
-                if 'reasoning' in guesses:
-                    st.markdown(f"*{guesses['reasoning']}*")
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            if 'ai_diagnosis' in st.session_state:
-                st.markdown('<div class="ai-box">', unsafe_allow_html=True)
-                st.markdown("### 🔍 Failure Diagnosis")
-                st.markdown(st.session_state['ai_diagnosis'])
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            if 'ai_step' in st.session_state:
-                st.markdown('<div class="ai-box">', unsafe_allow_html=True)
-                st.markdown("### 📝 Step Explanation")
-                st.markdown(st.session_state['ai_step'])
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Click to explain any iteration
-            st.divider()
-            st.subheader("Click any iteration to get AI explanation")
-            selected = st.selectbox(
-                "Select iteration:",
-                options=range(len(result['history'])),
-                format_func=lambda i: f"Iteration {result['history'][i]['iteration']}"
-            )
-            if st.button("Explain This Iteration"):
-                step = result['history'][selected]
-                prev = result['history'][selected-1] if selected > 0 else None
-                with st.spinner("Thinking..."):
-                    exp = ai.explain_step(result['func'], step, prev)
-                st.markdown('<div class="ai-box">', unsafe_allow_html=True)
-                st.markdown(exp)
-                st.markdown('</div>', unsafe_allow_html=True)
+            if not ai.available:
+                st.warning("AI Assistant is not connected. Add an API key in .env to enable question answering.")
+            else:
+                # Example question buttons
+                eq1, eq2, eq3 = st.columns(3)
+                with eq1:
+                    if st.button("Why did it converge?", key="eq_converge", use_container_width=True):
+                        st.session_state["ai_question"] = "Why did it converge?"
+                with eq2:
+                    if st.button("Explain the final iteration", key="eq_final", use_container_width=True):
+                        st.session_state["ai_question"] = "Explain the final iteration"
+                with eq3:
+                    if st.button("What does tolerance mean?", key="eq_tol", use_container_width=True):
+                        st.session_state["ai_question"] = "What does tolerance mean?"
+                
+                # Question input
+                question = st.text_area(
+                    "Ask a question about the method, result, graph, or iterations:",
+                    value=st.session_state.get("ai_question", ""),
+                    placeholder="Example: Why did the method converge so fast?",
+                    key="ai_question_input"
+                )
+                
+                if st.button("Ask AI Assistant", use_container_width=True, type="primary"):
+                    # Get derivative string if available
+                    deriv_str = ""
+                    try:
+                        from sympy import sympify, diff, symbols
+                        x_sym = symbols('x')
+                        f_sym = sympify(result['func'])
+                        deriv_str = str(diff(f_sym, x_sym))
+                    except Exception:
+                        pass
+                    
+                    with st.spinner("Thinking..."):
+                        answer = ai.answer_question(
+                            function_str=result['func'],
+                            question=question,
+                            history=result['history'],
+                            issues=result['issues'],
+                            root=result['root'],
+                            converged=result['converged'],
+                            derivative_str=deriv_str
+                        )
+                        st.session_state['ai_assistant_answer'] = answer
+                
+                # Display answer
+                if 'ai_assistant_answer' in st.session_state:
+                    st.markdown('<div class="ai-box">', unsafe_allow_html=True)
+                    st.markdown("### 💬 AI Assistant Answer")
+                    st.markdown(st.session_state['ai_assistant_answer'])
+                    st.markdown('</div>', unsafe_allow_html=True)
         
         # --- TAB 4: METHOD INFO ---
         with tab4:

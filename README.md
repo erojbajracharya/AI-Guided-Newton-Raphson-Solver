@@ -12,6 +12,7 @@ Built with **Streamlit**, **SymPy**, **Matplotlib**, and the **Google GenAI SDK*
 - **Step-by-step iteration table** — inspect every Newton-Raphson step (x, f(x), f'(x), error).
 - **Live visualisation** — function plot with tangent lines and a log-scale convergence chart.
 - **AI advisor** (optional) — uses Google Gemini to suggest starting points, diagnose failures, and explain individual iterations.
+- **AI Assistant** — ask simple questions about the function, iterations, convergence, and Newton-Raphson method.
 - **Pre-loaded examples** — one-click common functions to try.
 
 ---
@@ -52,15 +53,23 @@ pip install -r requirements.txt
 
 ### 4. Configure the API key (optional — for AI features)
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root.
 
+For one API key:
 ```
-GOOGLE_API_KEY=your_google_api_key_here
+GOOGLE_API_KEY=your_key_here
 ```
 
-You can get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
+For multiple rotating keys:
+```
+AI_GEN_API_KEYS=key1,key2,key3
+```
 
-> **Note:** The solver works perfectly without an API key — AI features will simply show fallback responses.
+The app tries each key one by one. If one key fails, the next key is tried automatically.
+
+You can get API keys from [Google AI Studio](https://aistudio.google.com/apikey).
+
+> **Note:** The solver works perfectly without an API key — AI features will simply be disabled.
 
 ---
 
@@ -107,7 +116,7 @@ To present this project to an audience or in a student presentation, explain the
 - **Iteration Table**: Displays a clean, tabular log of values for every step.
 - **Graph Visualization**: Renders both function tangents and convergence history plots.
 - **Convergence Checking**: Uses a dual check ensuring both $|f(x)|$ and $|x_{new} - x|$ are below tolerance.
-- **Optional AI Guidance**: Leverages LLM expertise for tutoring, with clean student-friendly fallback explanations when offline.
+- **Optional AI Guidance**: Leverages LLM expertise for tutoring and student-friendly explanations.
 
 ---
 
