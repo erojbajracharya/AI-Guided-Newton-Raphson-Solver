@@ -57,17 +57,10 @@ Create a `.env` file in the project root.
 
 For one API key:
 ```
-GOOGLE_API_KEY=your_key_here
+AI_GEN_API_KEYS=your_google_api_key_here
 ```
 
-For multiple rotating keys:
-```
-AI_GEN_API_KEYS=key1,key2,key3
-```
-
-The app tries each key one by one. If one key fails, the next key is tried automatically.
-
-You can get API keys from [Google AI Studio](https://aistudio.google.com/apikey).
+You can get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
 > **Note:** The solver works perfectly without an API key — AI features will simply be disabled.
 
@@ -148,7 +141,3 @@ AI-Guided-Newton-Raphson-Solver/
 | Combinations     | `x**2 - sin(x) + 1` |
 
 ---
-
-## License
-
-This project is open source and available under the [MIT License](LICENSE).
