@@ -32,6 +32,55 @@ st.markdown("""
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 20px; border-radius: 10px; color: white;
     }
+    
+    /* Floating popover button */
+    div[data-testid="stPopover"] {
+        position: fixed;
+        top: 60px;
+        right: 80px;
+        z-index: 999999;
+        width: max-content !important;
+    }
+    
+    div[data-testid="stPopover"] button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        border-radius: 20px !important;
+        padding: 8px 18px !important;
+        width: max-content !important;
+        height: auto !important;
+        font-weight: bold !important;
+        font-size: 14px !important;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+        border: none !important;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+    }
+    
+    div[data-testid="stPopover"] button:hover {
+        transform: translateY(-2px) scale(1.05) !important;
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5) !important;
+    }
+    
+    div[data-testid="stPopover"] button:active {
+        transform: translateY(1px) scale(0.98) !important;
+    }
+    
+    /* Popover body/container styling */
+    div[data-testid="stPopoverBody"] {
+        border-radius: 16px !important;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        width: 380px !important;
+        max-height: 500px !important;
+    }
+    
+    /* Dark mode support for popover content box */
+    @media (prefers-color-scheme: dark) {
+        div[data-testid="stPopoverBody"] {
+            background: rgba(26, 28, 36, 0.95) !important;
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -42,9 +91,7 @@ def set_example_function(expr):
         "result",
         "ai_guesses",
         "ai_diagnosis",
-        "ai_step",
-        "ai_assistant_answer",
-        "ai_question_input"
+        "ai_step"
     ]:
         if key in st.session_state:
             del st.session_state[key]
@@ -100,9 +147,7 @@ def main():
                 "result",
                 "ai_guesses",
                 "ai_diagnosis",
-                "ai_step",
-                "ai_assistant_answer",
-                "ai_question_input"
+                "ai_step"
             ]:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -459,55 +504,7 @@ You can also click one of the example functions in the sidebar.
                 st.markdown('<div class="ai-box">', unsafe_allow_html=True)
                 st.markdown(exp)
                 st.markdown("</div>", unsafe_allow_html=True)
-        
-        # === AI ASSISTANT Q&A ===
-        st.divider()
-        st.subheader("💬 Ask AI Assistant")
-        
-        if not ai.available:
-            st.warning(
-                "AI Assistant is not connected. "
-                "Add an API key in .env to enable question answering."
-            )
-        else:
-            question = st.text_area(
-                "Ask a question about the method, result, graph, or iterations:",
-                placeholder="Example: Why did the method converge so fast?",
-                key="ai_question_input"
-            )
-            
-            if st.button(
-                "Ask AI Assistant",
-                use_container_width=True,
-                type="primary"
-            ):
-                deriv_str = ""
 
-                try:
-                    from sympy import sympify, diff, symbols
-                    x_sym = symbols("x")
-                    f_sym = sympify(result["func"])
-                    deriv_str = str(diff(f_sym, x_sym))
-                except Exception:
-                    pass
-                
-                with st.spinner("Thinking..."):
-                    answer = ai.answer_question(
-                        function_str=result["func"],
-                        question=question,
-                        history=result["history"],
-                        issues=result["issues"],
-                        root=result["root"],
-                        converged=result["converged"],
-                        derivative_str=deriv_str
-                    )
-                    st.session_state["ai_assistant_answer"] = answer
-            
-            if "ai_assistant_answer" in st.session_state:
-                st.markdown('<div class="ai-box">', unsafe_allow_html=True)
-                st.markdown("### 💬 AI Assistant Answer")
-                st.markdown(st.session_state["ai_assistant_answer"])
-                st.markdown("</div>", unsafe_allow_html=True)
     
     # --- TAB 4: METHOD INFO ---
     with tab4:
@@ -549,6 +546,78 @@ $$x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}$$
 | Divergence | Values move away from root | Start closer to the root |
 | Slow convergence | Flat curve or poor guess | Increase iterations or change x₀ |
 """)
+
+    # === GLOBAL AI ASSISTANT CHATBOT ===
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+
+    with st.popover("💬 Ask AI"):
+        st.markdown("<h3 style='margin-bottom: 0px;'>🤖 AI Assistant</h3>", unsafe_allow_html=True)
+        st.caption("Ask me about the solver, iterations, or method")
+        
+        # Only show chat history container and clear button if there are messages
+        if st.session_state["chat_history"]:
+            col_chat_title, col_clear = st.columns([3, 1])
+            with col_clear:
+                if st.button("Clear", key="clear_chat_globally", use_container_width=True):
+                    st.session_state["chat_history"] = []
+                    st.rerun()
+            
+            st.divider()
+            
+            # Display chat history in scrollable container
+            with st.container(height=300):
+                for msg in st.session_state["chat_history"]:
+                    with st.chat_message(msg["role"]):
+                        st.write(msg["content"])
+            
+            st.divider()
+        
+        # Chat input field
+        if not ai.available:
+            st.warning("AI Assistant is not connected. Add an API key in `.env` to enable chat.")
+        else:
+            if prompt := st.chat_input("Ask any question to get started...", key="global_chat_input"):
+                # Append user question
+                st.session_state["chat_history"].append({"role": "user", "content": prompt})
+                
+                # Retrieve current solver context if available
+                result = st.session_state.get("result", None)
+                if result:
+                    deriv_str = ""
+                    try:
+                        from sympy import sympify, diff, symbols
+                        x_sym = symbols("x")
+                        f_sym = sympify(result["func"])
+                        deriv_str = str(diff(f_sym, x_sym))
+                    except Exception:
+                        pass
+                    
+                    with st.spinner("Thinking..."):
+                        answer = ai.answer_question(
+                            function_str=result["func"],
+                            question=prompt,
+                            history=result["history"],
+                            issues=result["issues"],
+                            root=result["root"],
+                            converged=result["converged"],
+                            derivative_str=deriv_str
+                        )
+                else:
+                    # Generic fallback if solver has not run yet
+                    with st.spinner("Thinking..."):
+                        prompt_generic = f"""You are helping a student understand a Newton-Raphson solver project.
+Answer in simple student-friendly language.
+Student question: {prompt}
+Give a clear answer in 4-8 sentences. If the question is unrelated to the Newton-Raphson solver project, politely say that this assistant is focused on the Newton-Raphson solver."""
+                        try:
+                            answer = ai._try_generate_content(prompt_generic)
+                        except Exception:
+                            answer = "AI Advisor could not generate an answer. Please check your API keys."
+                
+                # Append assistant response
+                st.session_state["chat_history"].append({"role": "assistant", "content": answer})
+                st.rerun()
 
 
 if __name__ == "__main__":

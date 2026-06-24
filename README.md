@@ -11,8 +11,9 @@ Built with **Streamlit**, **SymPy**, **Matplotlib**, and the **Google GenAI SDK*
 - **Symbolic differentiation** — enter any function of `x` and the derivative is computed automatically.
 - **Step-by-step iteration table** — inspect every Newton-Raphson step (x, f(x), f'(x), error).
 - **Live visualisation** — function plot with tangent lines and a log-scale convergence chart.
-- **AI advisor** (optional) — uses Google Gemini to suggest starting points, diagnose failures, and explain individual iterations.
-- **AI Assistant** — ask simple questions about the function, iterations, convergence, and Newton-Raphson method.
+- **AI Advisor** — get AI-powered starting suggestions, failure diagnosis, and step explanations directly in the advisor panel.
+- **Global AI Assistant (Chatbot)** — a premium floating chatbot accessible from any tab in the top-right corner. It uses solver results to answer context-specific questions about your equations, or fallback prompts for general Newton-Raphson theory.
+- **Automatic Key Rotation** — load one or multiple Gemini API keys. The app automatically rotates keys upon failure to prevent quota/rate limits.
 - **Pre-loaded examples** — one-click common functions to try.
 
 ---
@@ -51,13 +52,18 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure the API key (optional — for AI features)
+### 4. Configure the API keys (optional — for AI features)
 
 Create a `.env` file in the project root.
 
-For one API key:
+You can configure a single key:
+```env
+GOOGLE_API_KEY=your_google_api_key_here
 ```
-AI_GEN_API_KEYS=your_google_api_key_here
+
+Or configure multiple keys for automatic rotation:
+```env
+AI_GEN_API_KEYS=api_key_one,api_key_two,api_key_three
 ```
 
 You can get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
@@ -86,6 +92,7 @@ The app will open automatically in your browser at **http://localhost:8501**.
    - **📋 Iterations** — detailed table of every step.
    - **🤖 AI Advisor** — get AI-powered suggestions and failure diagnosis.
    - **📖 Method Info** — learn how Newton-Raphson works.
+5. Ask context-aware questions to the **💬 Ask AI** floating assistant in the top-right corner.
 
 ---
 
@@ -100,6 +107,7 @@ To present this project to an audience or in a student presentation, explain the
    Each iteration refines the estimate of the root.
 4. **Streamlit shows graph, iteration table, and convergence**: Streamlit renders an interactive visualization showing the curve, tangent lines, step log-scale error decrease, and a summary details table.
 5. **Gemini AI is optional**: If a Google Gemini API Key is provided, the AI advisor provides mathematical insights. If not, the app uses built-in math rules to explain the iteration steps and diagnose issues.
+6. **Key Rotator & Floating Assistant**: A custom `APIRotator` handles multiple keys seamlessly. A persistent chatbot widget floats at the top-right corner, letting users interact with the AI assistant from any tab context.
 
 ---
 
@@ -110,6 +118,7 @@ To present this project to an audience or in a student presentation, explain the
 - **Graph Visualization**: Renders both function tangents and convergence history plots.
 - **Convergence Checking**: Uses a dual check ensuring both $|f(x)|$ and $|x_{new} - x|$ are below tolerance.
 - **Optional AI Guidance**: Leverages LLM expertise for tutoring and student-friendly explanations.
+- **Robust API Key Rotator**: Seamlessly manages multiple API keys to avoid exhaustion.
 
 ---
 
@@ -117,13 +126,14 @@ To present this project to an audience or in a student presentation, explain the
 
 ```
 AI-Guided-Newton-Raphson-Solver/
-├── app.py              # Streamlit web interface
+├── app.py              # Streamlit web interface with global chatbot widget
 ├── solver.py           # Newton-Raphson solver engine
-├── ai_advisor.py       # Google Gemini AI integration
+├── ai_advisor.py       # Google Gemini AI advisor services
+├── api_rotator.py      # Google Gemini API key rotator
 ├── requirements.txt    # Python dependencies
-├── .env                # API key (not committed)
+├── .env                # API keys (not committed)
 ├── .gitignore
-└── README.md
+└── README.md           # Documentation
 ```
 
 ---

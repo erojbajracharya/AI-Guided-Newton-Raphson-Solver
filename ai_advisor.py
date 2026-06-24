@@ -5,103 +5,28 @@ Uses Google Gemini to provide intelligent guidance for Newton-Raphson solving.
 Supports multiple API keys with automatic rotation.
 """
 
-from google import genai
-import os
 from typing import Dict, List, Optional
+from api_rotator import APIRotator
 
 
 class GeminiAdvisor:
     """AI advisor using Google Gemini for Newton-Raphson guidance."""
     
     def __init__(self, api_key: str = None):
-        """Initialize Gemini with one or more API keys.
-        
-        Supports:
-        - A single key passed directly via api_key parameter
-        - AI_GEN_API_KEYS env var with comma-separated keys
-        - GOOGLE_API_KEY env var as a single backup key
-        """
-        # Collect all available keys
-        keys = []
-        
+        """Initialize GeminiAdvisor using the APIRotator."""
+        self.rotator = APIRotator()
         if api_key:
-            keys.append(api_key.strip())
-        else:
-            # Parse comma-separated keys from AI_GEN_API_KEYS
-            keys_str = os.getenv('AI_GEN_API_KEYS', '')
-            if keys_str:
-                keys_str = keys_str.strip('"').strip("'")
-                for k in keys_str.split(','):
-                    stripped = k.strip()
-                    if stripped:
-                        keys.append(stripped)
-            
-            # Add single backup key from GOOGLE_API_KEY
-            single_key = os.getenv('GOOGLE_API_KEY', '').strip()
-            if single_key:
-                keys.append(single_key)
+            self.rotator.api_keys = [api_key.strip()]
+            self.rotator.available = True
+        self.available = self.rotator.available
         
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_keys = []
-        for k in keys:
-            if k not in seen:
-                seen.add(k)
-                unique_keys.append(k)
-        
-        self.api_keys = unique_keys
-        self._current_index = 0
-        self.model_name = 'gemini-2.5-flash'
-        
-        if not self.api_keys:
-            self.available = False
-            self.client = None
-            return
-        
-        # Create initial client with the first key
-        try:
-            self.client = genai.Client(api_key=self.api_keys[0])
-            self.available = True
-        except Exception:
-            self.available = False
-            self.client = None
-    
     def _try_generate_content(self, prompt: str) -> str:
-        """Try each API key one by one until one works.
-        
-        Returns response.text on success.
-        Raises the last exception if all keys fail.
-        """
-        if not self.api_keys:
-            raise ConnectionError("No API keys available.")
-        
-        last_error = None
-        num_keys = len(self.api_keys)
-        
-        for attempt in range(num_keys):
-            index = (self._current_index + attempt) % num_keys
-            
-            try:
-                # Create client for this key if it's not the current one
-                if attempt > 0 or self.client is None:
-                    self.client = genai.Client(api_key=self.api_keys[index])
-                
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt
-                )
-                
-                # This key worked — remember it for future requests
-                self._current_index = index
-                self.available = True
-                return response.text
-                
-            except Exception as e:
-                last_error = e
-                continue
-        
-        # All keys failed
-        raise last_error
+        """Try each API key one by one until one works."""
+        try:
+            return self.rotator.generate_content(prompt)
+        except Exception as e:
+            self.available = self.rotator.available
+            raise e
     
     def suggest_initial_guesses(self, function_str: str) -> Dict:
         """Suggest good starting points for Newton-Raphson."""
