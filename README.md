@@ -55,7 +55,7 @@ pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```
-GOOGLE_API_KEY=your_google_api_key_here
+AI_GEN_API_KEYS=your_google_api_key_here
 ```
 
 You can get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
@@ -139,7 +139,3 @@ AI-Guided-Newton-Raphson-Solver/
 | Combinations     | `x**2 - sin(x) + 1` |
 
 ---
-
-## License
-
-This project is open source and available under the [MIT License](LICENSE).
